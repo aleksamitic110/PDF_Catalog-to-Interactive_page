@@ -47,11 +47,7 @@ class ProductCard(QFrame):
         self._mode = mode
 
         self.setObjectName("productCard")
-        self.setStyleSheet(
-            "#productCard { background: #ffffff; border: 1px solid #d0d0d0;"
-            "border-radius: 6px; }"
-            "#productCard QLabel { color: #111111; }"
-        )
+        self.setCursor(Qt.PointingHandCursor)
 
         if mode == GRID:
             self.setFixedSize(GRID_W, GRID_H)
@@ -60,6 +56,9 @@ class ProductCard(QFrame):
             self.setFixedHeight(LIST_H)
             self.setMaximumWidth(16777215)
             self._build_list()
+
+        self.set_selected(selected)
+        self.set_quantity(quantity)
 
     # ----------------------------------------------------------------------
     # shared bits
@@ -70,6 +69,25 @@ class ProductCard(QFrame):
         if self._mode == GRID:
             return QSize(GRID_W, GRID_H)
         return QSize(800, LIST_H)
+
+    def _apply_style(self) -> None:
+        if self.checkbox.isChecked():
+            background, border = "#e7f0fb", "2px solid #2f6fd6"
+        else:
+            background, border = "#ffffff", "1px solid #d0d0d0"
+        self.setStyleSheet(
+            f"#productCard {{ background: {background}; border: {border};"
+            "border-radius: 6px; }"
+            "#productCard QLabel { color: #111111; }"
+        )
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self.set_selected(not self.checkbox.isChecked())
+            self.selectionChanged.emit(self.product.code, self.checkbox.isChecked())
+            event.accept()
+            return
+        super().mousePressEvent(event)
 
     def _make_name_label(self, text: str, width: int,
                          font_size: int, lines: int) -> QLabel:
@@ -242,12 +260,14 @@ class ProductCard(QFrame):
     def _on_check_toggled(self, checked: bool) -> None:
         if self._silent:
             return
+        self._apply_style()
         self.selectionChanged.emit(self.product.code, checked)
 
     def set_selected(self, selected: bool) -> None:
         self._silent = True
         self.checkbox.setChecked(selected)
         self._silent = False
+        self._apply_style()
 
     def set_quantity(self, text: str) -> None:
         self._silent = True

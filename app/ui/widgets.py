@@ -63,6 +63,11 @@ class QuantityEdit(QLineEdit):
         self.setPlaceholderText("Količina")
         self.setFixedWidth(110)
         self.setMaxLength(6)
+        self.setStyleSheet(
+            "QLineEdit { background: #ffffff; color: #111111;"
+            "border: 1px solid #b0b0b0; border-radius: 4px; padding: 2px 6px; }"
+            "QLineEdit:focus { border: 1px solid #2f6fd6; }"
+        )
         self.textChanged.connect(self._on_change)
 
     def _on_change(self, text: str) -> None:

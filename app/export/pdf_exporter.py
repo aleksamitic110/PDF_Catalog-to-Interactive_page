@@ -17,30 +17,41 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 FONT_REGULAR = "CatalogSans"
 FONT_BOLD = "CatalogSansBold"
 
-_FONT_PATHS = [
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "C:/Windows/Fonts/arial.ttf",
-    "C:/Windows/Fonts/arialbd.ttf",
+_FONT_FAMILIES = [
+    (
+        "CatalogSans",
+        "CatalogSansBold",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    ),
+    (
+        "CatalogArial",
+        "CatalogArialBold",
+        "C:/Windows/Fonts/arial.ttf",
+        "C:/Windows/Fonts/arialbd.ttf",
+    ),
 ]
+
+_FALLBACK = ("Helvetica", "Helvetica-Bold")
 
 
 def _register_font() -> None:
-    """Register a Unicode TTF font so Serbian diacritics render correctly."""
+    """Register a regular+bold unicode TTF pair so Serbian diacritics render.
+
+    A font is only usable when BOTH the regular and bold files exist, so the
+    first complete pair on this machine wins; otherwise reportlab's built-in
+    Helvetica names are used (no diacritics, but the export never crashes).
+    """
+    global FONT_REGULAR, FONT_BOLD
     if FONT_REGULAR in pdfmetrics.getRegisteredFontNames():
         return
-    regular = _FONT_PATHS[0]
-    bold = _FONT_PATHS[1]
-    for candidate in (regular, bold):
-        if candidate and Path(candidate).exists():
-            break
-    else:
-        return
-    pdfmetrics.registerFont(TTFont(FONT_REGULAR, regular))
-    try:
-        pdfmetrics.registerFont(TTFont(FONT_BOLD, bold))
-    except Exception:
-        pass
+    for name_r, name_b, regular_path, bold_path in _FONT_FAMILIES:
+        if Path(regular_path).exists() and Path(bold_path).exists():
+            pdfmetrics.registerFont(TTFont(name_r, regular_path))
+            pdfmetrics.registerFont(TTFont(name_b, bold_path))
+            FONT_REGULAR, FONT_BOLD = name_r, name_b
+            return
+    FONT_REGULAR, FONT_BOLD = _FALLBACK
 
 
 def default_filename() -> str:

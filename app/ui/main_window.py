@@ -29,6 +29,7 @@ from app.export.pdf_exporter import export_pdf
 from app.pdf.parser import ParseResult, parse_catalog
 from app.services.order_service import build_order
 from app.ui.product_list import CATEGORY_ALL, GRID, LIST, ProductList
+from app.ui.selection_panel import SelectionPanel
 
 WINDOW_TITLE = "PDF Catalog Order Manager"
 
@@ -69,7 +70,7 @@ class MainWindow(QMainWindow):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle(WINDOW_TITLE)
-        self.resize(980, 820)
+        self.resize(1280, 860)
 
         self._worker: ParseWorker | None = None
         self._products = []
@@ -115,8 +116,13 @@ class MainWindow(QMainWindow):
 
         root.addLayout(top)
 
+        middle = QHBoxLayout()
+        middle.setSpacing(12)
+        left = QVBoxLayout()
+        left.setSpacing(8)
+
         self.product_list = ProductList()
-        root.addWidget(self.product_list, 1)
+        left.addWidget(self.product_list, 1)
 
         pager = QHBoxLayout()
         pager.addStretch(1)
@@ -134,8 +140,14 @@ class MainWindow(QMainWindow):
         pager.addWidget(self.next_button)
         pager.addStretch(1)
         self.product_list.pageChanged.connect(self._on_page_changed)
-        root.addLayout(pager)
+        left.addLayout(pager)
         self._on_page_changed(1, 1)
+        middle.addLayout(left, 1)
+
+        self.selection_panel = SelectionPanel()
+        middle.addWidget(self.selection_panel)
+
+        root.addLayout(middle)
 
         bottom = QHBoxLayout()
         self.selected_label = QLabel("Selected products: 0")
@@ -143,7 +155,7 @@ class MainWindow(QMainWindow):
         bottom.addStretch(1)
 
         self.clear_button = QPushButton("Clear selection")
-        self.clear_button.clicked.connect(self.product_list.clear_selection)
+        self.clear_button.clicked.connect(self._clear_selection)
         bottom.addWidget(self.clear_button)
 
         self.export_excel_button = QPushButton("Export Excel")
@@ -159,9 +171,26 @@ class MainWindow(QMainWindow):
         self.product_list.totalSelectedChanged.connect(
             lambda n: self.selected_label.setText(f"Selected products: {n}")
         )
+        self.product_list.selectionToggled.connect(
+            lambda *_: self._refresh_selection_panel()
+        )
+        self.product_list.quantityEdited.connect(
+            lambda *_: self._refresh_selection_panel()
+        )
 
         self.setCentralWidget(central)
         self.statusBar().showMessage("Otvori PDF katalog za početak.")
+
+    def _clear_selection(self) -> None:
+        self.product_list.clear_selection()
+        self._refresh_selection_panel()
+
+    def _refresh_selection_panel(self) -> None:
+        items = [
+            (p.code, p.name, self.product_list.quantity_of(p.code))
+            for p in self.product_list.selected_products()
+        ]
+        self.selection_panel.refresh(items)
 
     # ------------------------------------------------------------- actions
 
