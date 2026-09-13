@@ -124,6 +124,7 @@ class ProductList(QScrollArea):
         self._list_host.setVisible(mode == LIST)
         self._rebuild_page()
         self.viewModeChanged.emit(mode)
+        self.pageChanged.emit(self._page, self.total_pages)
 
     def _active_surface(self) -> FlowLayout | QVBoxLayout:
         return self._flow if self._mode == GRID else self._rows
@@ -131,10 +132,14 @@ class ProductList(QScrollArea):
     # ------------------------------------------------------------- pagination
 
     @property
+    def page_size(self) -> int:
+        return 96 if self._mode == GRID else PAGE_SIZE
+
+    @property
     def total_pages(self) -> int:
         if not self._filtered:
             return 1
-        return (len(self._filtered) + self._page_size - 1) // self._page_size
+        return (len(self._filtered) + self.page_size - 1) // self.page_size
 
     @property
     def page(self) -> int:
@@ -149,8 +154,8 @@ class ProductList(QScrollArea):
         self.pageChanged.emit(self._page, self.total_pages)
 
     def _page_products(self) -> list[Product]:
-        start = (self._page - 1) * self._page_size
-        return self._filtered[start:start + self._page_size]
+        start = (self._page - 1) * self.page_size
+        return self._filtered[start:start + self.page_size]
 
     # -------------------------------------------------------------- render
 

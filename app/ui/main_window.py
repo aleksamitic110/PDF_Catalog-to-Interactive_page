@@ -102,6 +102,7 @@ class MainWindow(QMainWindow):
         top.addWidget(QLabel("Category:"))
         self.category_combo = QComboBox()
         self.category_combo.addItem(CATEGORY_ALL)
+        self.category_combo.setMinimumWidth(240)
         self.category_combo.currentTextChanged.connect(self._apply_filter)
         top.addWidget(self.category_combo)
 
@@ -110,6 +111,7 @@ class MainWindow(QMainWindow):
         self.view_combo = QComboBox()
         self.view_combo.addItem("Grid")
         self.view_combo.addItem("List")
+        self.view_combo.setMinimumWidth(100)
         self.view_combo.setToolTip("Promeni raspored proizvoda")
         self.view_combo.currentIndexChanged.connect(self._on_view_changed)
         top.addWidget(self.view_combo)

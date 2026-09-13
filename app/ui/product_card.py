@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 from app.models.product import Product
 from app.ui.widgets import QuantityEdit, ThumbnailLabel
 
-GRID_W, GRID_H = 430, 300
+GRID_W, GRID_H = 240, 300
 LIST_H = 260
 NAME_LINES = 2
 GRID = "grid"
@@ -132,47 +132,40 @@ class ProductCard(QFrame):
     # ----------------------------------------------------------------------
 
     def _build_grid(self) -> None:
-        layout = QHBoxLayout(self)
-        layout.setSpacing(10)
-        layout.setContentsMargins(14, 12, 14, 12)
+        layout = QVBoxLayout(self)
+        layout.setSpacing(4)
+        layout.setContentsMargins(9, 7, 9, 7)
 
         self.checkbox = QCheckBox()
         self.checkbox.setToolTip("Izaberi proizvod")
-        layout.addWidget(self.checkbox, alignment=Qt.AlignTop)
+        layout.addWidget(self.checkbox, alignment=Qt.AlignRight)
 
-        thumb = ThumbnailLabel(self._pixmap, size=150)
-        layout.addWidget(thumb, alignment=Qt.AlignTop)
+        thumb = ThumbnailLabel(self._pixmap, size=96)
+        thumb.setMinimumHeight(0)
+        layout.addWidget(thumb, alignment=Qt.AlignHCenter)
 
-        info = QVBoxLayout()
-        info.setSpacing(4)
-
-        name_width = GRID_W - 28 - 22 - 12 - 150 - 10
         self.name_label = self._make_name_label(
-            self.product.name, name_width, 14, NAME_LINES
+            self.product.name, GRID_W - 18, 12, NAME_LINES
         )
-        info.addWidget(self.name_label)
+        layout.addWidget(self.name_label)
 
         self.code_label = QLabel(f"Šifra: {self.product.code}")
         self._style_meta(self.code_label)
-        info.addWidget(self.code_label)
+        layout.addWidget(self.code_label)
 
         if self.product.package:
             self.package_label = QLabel(f"Paket: {self.product.package}")
             self._style_meta(self.package_label)
-            info.addWidget(self.package_label)
+            layout.addWidget(self.package_label)
+
         prices = self._prices_label()
         if prices:
-            info.addWidget(prices)
-        if self.product.category:
-            self.category_label = QLabel(self.product.category)
-            self._style_meta(self.category_label, small=True)
-            info.addWidget(self.category_label)
+            layout.addWidget(prices)
 
-        info.addStretch(1)
+        layout.addStretch(1)
         self.quantity = QuantityEdit(self.product.code)
-        info.addWidget(self.quantity)
+        layout.addWidget(self.quantity, alignment=Qt.AlignLeft)
 
-        layout.addLayout(info, 1)
         self._connect()
 
     # ----------------------------------------------------------------------
