@@ -326,7 +326,10 @@ class MainWindow(QMainWindow):
         if not target:
             return
 
-        items = [(item.product.code, item.quantity) for item in order.items]
+        items = [
+            (item.product.code, item.quantity, item.product.price_for(item.quantity))
+            for item in order.items
+        ]
         try:
             if kind == "excel":
                 export_excel(items, path=target)

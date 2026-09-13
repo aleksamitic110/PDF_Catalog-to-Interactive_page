@@ -6,7 +6,7 @@ import pytest
 
 from app.export.excel_exporter import export_excel
 from app.export.pdf_exporter import export_pdf
-from app.models.product import Product
+from app.models.product import Product, format_price, parse_price
 from app.services.order_service import build_order, parse_quantity
 
 from openpyxl import load_workbook
@@ -84,6 +84,56 @@ def test_excel_export_writes_code_and_quantity_only(tmp_path) -> None:
     assert sheet.max_column == 2  # no prices/names/images leaked
 
 
+def test_excel_export_appends_approximate_total(tmp_path) -> None:
+    path = export_excel(
+        [("12391", 12, 1033.70), ("11951", 2, 249.31)],
+        path=tmp_path / "total.xlsx",
+    )
+    sheet = load_workbook(path).active
+    assert sheet.max_row == 4
+    assert sheet["A4"].value == "UKUPNO (približno), RSD"
+    assert sheet["B4"].value == pytest.approx(12 * 1033.70 + 2 * 249.31)
+
+
+def test_excel_export_skips_total_when_no_prices(tmp_path) -> None:
+    path = export_excel([("12391", 12, None)], path=tmp_path / "no.xlsx")
+    sheet = load_workbook(path).active
+    assert sheet.max_row == 2  # data only, no total row
+
+
+# ---------------------------------------------------------------- pricing
+
+
+def test_format_price_serbian() -> None:
+    assert format_price(1033.7) == "1.033,70"
+    assert format_price(12903.02) == "12.903,02"
+    assert parse_price("1,033.70") == pytest.approx(1033.70)
+    assert parse_price("249.31") == pytest.approx(249.31)
+    assert parse_price("-") is None
+
+
+def test_price_for_uses_correct_tier() -> None:
+    product = Product(
+        id=0,
+        code="11951",
+        name="X",
+        tiers=[("1-5 kom", "249.31"), ("6-11 kom", "236.59"), ("12+ kom", "228.96")],
+    )
+    assert product.price_for(3) == pytest.approx(249.31)
+    assert product.price_for(5) == pytest.approx(249.31)
+    assert product.price_for(6) == pytest.approx(236.59)
+    assert product.price_for(11) == pytest.approx(236.59)
+    assert product.price_for(12) == pytest.approx(228.96)
+    assert product.price_for(200) == pytest.approx(228.96)  # bulk -> last tier
+
+
+def test_price_for_none_when_unpriced() -> None:
+    priceless = Product(id=0, code="11296", name="X", tiers=[("1-3 kom", "-")])
+    assert priceless.price_for(2) is None
+    empty = Product(id=0, code="Y", name="X")
+    assert empty.price_for(2) is None
+
+
 # -------------------------------------------------------------------- pdf
 
 
@@ -120,3 +170,27 @@ def test_pdf_export_puts_headers_in_two_columns(tmp_path) -> None:
     assert abs(header[0][1] - header[1][1]) < 2
     # Šifra sits left of Količina
     assert header[0][0] < header[1][0]
+
+
+def test_pdf_export_prints_approximate_total(tmp_path) -> None:
+    path = export_pdf(
+        [("12391", 12, 1033.70), ("11951", 2, 249.31)],
+        path=tmp_path / "total.pdf",
+    )
+    import fitz  # PyMuPDF
+
+    with fitz.open(path) as doc:
+        text = "".join(page.get_text() for page in doc)
+
+    assert "PRIBLIŽNA UKUPNA CENA (RSD)" in text
+    assert "12.903,02" in text
+
+
+def test_pdf_export_omits_total_when_no_prices(tmp_path) -> None:
+    path = export_pdf([("12391", 12)], path=tmp_path / "plain.pdf")
+    import fitz  # PyMuPDF
+
+    with fitz.open(path) as doc:
+        text = "".join(page.get_text() for page in doc)
+
+    assert "PRIBLIŽNA UKUPNA CENA" not in text

@@ -253,11 +253,13 @@ class ProductCard(QFrame):
         if self._silent:
             return
         self._apply_style()
+        self.quantity.setEnabled(checked)
         self.selectionChanged.emit(self.product.code, checked)
 
     def set_selected(self, selected: bool) -> None:
         self._silent = True
         self.checkbox.setChecked(selected)
+        self.quantity.setEnabled(selected)
         self._silent = False
         self._apply_style()
 
