@@ -1,0 +1,1261 @@
+PROJECT: PDF CATALOG ORDER MANAGER
+
+Cilj projekta
+============
+
+Napraviti desktop aplikaciju koja učitava PDF katalog proizvoda koji može imati veliki broj stranica i veliki broj proizvoda.
+
+Korisnik trenutno ručno gleda PDF katalog, zapisuje šifru proizvoda i željenu količinu na papir, npr:
+
+12391 - 50 kom
+
+Cilj aplikacije je da potpuno eliminiše ručno prepisivanje šifara.
+
+Aplikacija treba da:
+1. Učita PDF katalog.
+2. Automatski pronađe proizvode u katalogu.
+3. Za svaki proizvod prikaže:
+   - sliku proizvoda, ako je moguće izdvojiti je iz PDF-a
+   - puni naziv proizvoda
+   - šifru proizvoda
+   - podatak o pakovanju ako postoji
+   - opcionalno druge korisne podatke koji nisu cena
+4. Omogući korisniku da selektuje proizvode.
+5. Omogući unos željene količine za svaki selektovani proizvod.
+6. Omogući pretragu proizvoda.
+7. Omogući filtriranje/kategorije ako se mogu pouzdano izvući iz PDF-a.
+8. Omogući export porudžbine.
+9. Export treba da sadrži samo:
+   ŠIFRA - KOLIČINA
+10. Cene iz kataloga NISU relevantne i ne treba ih prikazivati u finalnoj porudžbini.
+
+
+==================================================
+1. PREPORUČENI TECH STACK
+==================================================
+
+Koristiti Python.
+
+GUI:
+- PySide6
+
+PDF processing:
+- PyMuPDF (fitz)
+
+Image processing:
+- Pillow
+
+Excel export:
+- openpyxl
+
+PDF export:
+- reportlab
+
+Packaging:
+- PyInstaller
+
+Za prvu verziju NE koristiti:
+- Electron
+- React
+- Flutter
+- web server
+- cloud database
+- remote backend
+
+Aplikacija treba da bude lokalna desktop aplikacija.
+
+Sve treba da radi lokalno na računaru bez potrebe za internet konekcijom.
+
+
+==================================================
+2. ARHITEKTURA PROJEKTA
+==================================================
+
+Predložena struktura:
+
+catalog-order-manager/
+│
+├── app/
+│   ├── main.py
+│   │
+│   ├── models/
+│   │   ├── product.py
+│   │   └── order.py
+│   │
+│   ├── pdf/
+│   │   ├── parser.py
+│   │   ├── text_extractor.py
+│   │   └── image_extractor.py
+│   │
+│   ├── ui/
+│   │   ├── main_window.py
+│   │   ├── product_card.py
+│   │   ├── product_list.py
+│   │   └── widgets.py
+│   │
+│   ├── export/
+│   │   ├── excel_exporter.py
+│   │   └── pdf_exporter.py
+│   │
+│   ├── services/
+│   │   ├── catalog_service.py
+│   │   └── order_service.py
+│   │
+│   └── utils/
+│       ├── code_parser.py
+│       └── image_utils.py
+│
+├── tests/
+│   ├── test_parser.py
+│   ├── test_code_parser.py
+│   └── test_export.py
+│
+├── requirements.txt
+├── README.md
+└── main.py
+
+
+==================================================
+3. MODEL PROIZVODA
+==================================================
+
+Napraviti Product model.
+
+Primer:
+
+Product:
+    id
+    code
+    name
+    package
+    image_path
+    category
+    page_number
+    raw_text
+
+Minimalno obavezna polja:
+
+code
+name
+
+Ostala polja mogu biti None.
+
+Primer:
+
+Product(
+    code="12391",
+    name="ARIEL TECNI DETERDZENT 1,8L ALPINE",
+    package="4",
+    image_path="/tmp/product_12391.jpg",
+    category="ARIEL"
+)
+
+
+==================================================
+4. ŠIFRA PROIZVODA
+==================================================
+
+Vrlo važna stvar:
+
+U PDF katalogu šifra može biti napisana sa slovom ispred broja.
+
+Primer:
+
+M12391
+
+Korisniku je potrebno samo:
+
+12391
+
+Dakle parser mora da normalizuje šifru.
+
+Primeri:
+
+M12391 -> 12391
+A12345 -> 12345
+P98765 -> 98765
+
+Napraviti funkciju:
+
+normalize_product_code()
+
+koja:
+- uklanja početno slovo ako postoji
+- uklanja nepotrebne razmake
+- zadržava numerički deo
+- vraća samo broj kao string
+
+VAŽNO:
+
+Ne treba slepo uklanjati prvi karakter.
+
+Treba koristiti regex i validaciju.
+
+Primer:
+
+M12391 -> 12391
+
+Ali ako parser pronađe nešto što nije validna šifra, ne treba automatski pretpostaviti da je to proizvodna šifra.
+
+
+==================================================
+5. PDF PARSER
+==================================================
+
+PDF može imati:
+- 1 stranicu
+- 10 stranica
+- 50+ stranica
+
+Parser mora da obradi SVE stranice.
+
+Ne sme da bude hardkodovan za samo jednu stranicu.
+
+Proces:
+
+PDF
+ ↓
+otvori dokument
+ ↓
+iteriraj kroz sve stranice
+ ↓
+izvuci tekst
+ ↓
+pronađi proizvode
+ ↓
+izvuci slike
+ ↓
+normalizuj podatke
+ ↓
+vrati listu Product objekata
+
+
+==================================================
+6. PRVO ISPITATI STRUKTURU PDF-a
+==================================================
+
+Pre izrade finalnog parsera potrebno je analizirati originalni PDF.
+
+Utvrditi:
+
+1. Da li je tekst stvarno tekstualni sadržaj PDF-a?
+2. Da li može da se selektuje tekst mišem?
+3. Kako je zapisana šifra?
+4. Kako je zapisan naziv?
+5. Kako je označeno pakovanje?
+6. Da li je svaki proizvod zaseban PDF element?
+7. Da li su slike stvarno embedded images?
+8. Da li je cela stranica jedna velika slika?
+9. Da li postoji OCR potreba?
+
+Ako je tekst selektabilan:
+- koristiti PyMuPDF text extraction.
+
+Ako PDF sadrži skenirane stranice/slike:
+- koristiti OCR kao fallback.
+
+OCR NE treba koristiti ako nije potreban.
+
+
+==================================================
+7. EKSTRAKCIJA TEKSTA
+==================================================
+
+Koristiti PyMuPDF:
+
+import fitz
+
+document = fitz.open(pdf_path)
+
+for page in document:
+    text = page.get_text()
+
+Parser treba da čuva i raw_text za debugging.
+
+Primer:
+
+page_number = 5
+
+raw_text = page.get_text()
+
+Nakon toga parser analizira tekst.
+
+
+==================================================
+8. DETEKCIJA PROIZVODA
+==================================================
+
+Najvažniji deo parsera.
+
+Ne pretpostavljati da je svaki tekstualni red proizvod.
+
+Potrebno je napraviti heuristiku zasnovanu na stvarnom PDF-u.
+
+Tipičan proizvod može izgledati ovako:
+
+M12391
+
+ARIEL TECNI DETERDZENT 1,8L ALPINE
+
+PAKET: 4
+
+uz različite podatke o cenama koji se mogu ignorisati.
+
+Parser treba da:
+- pronađe validnu šifru
+- pronađe naziv koji pripada toj šifri
+- pronađe paket ako postoji
+- ignoriše cenu
+- napravi jedan Product objekat
+
+
+==================================================
+9. CENE
+==================================================
+
+Cene nisu potrebne.
+
+PDF može imati više cena:
+
+1-3 kom
+4-11 kom
+12+ kom
+
+i različite vrednosti.
+
+Sve cene ignorisati.
+
+Ne treba ih čuvati u Product modelu osim ako je potrebno za debugging.
+
+Finalna aplikacija ne treba da prikazuje cene.
+
+
+==================================================
+10. SLIKE PROIZVODA
+==================================================
+
+Ako PDF sadrži embedded slike proizvoda:
+
+- pokušati ih izvući pomoću PyMuPDF
+- povezati sliku sa odgovarajućim proizvodom
+- sačuvati privremeno ili u lokalni cache
+
+Primer:
+
+images/
+    12391.jpg
+    12079.jpg
+    12208.jpg
+
+Ako se slika ne može pouzdano povezati sa proizvodom:
+- ne sme doći do pogrešnog povezivanja
+- koristiti fallback
+
+Fallback može biti:
+- screenshot/crop odgovarajućeg dela stranice
+- ili placeholder "No image"
+
+Bolje je prikazati bez slike nego prikazati pogrešnu sliku proizvoda.
+
+
+==================================================
+11. GUI
+==================================================
+
+Glavni prozor:
+
+--------------------------------------------------
+PDF Catalog Order Manager
+--------------------------------------------------
+
+[ Open PDF ]
+
+Search:
+[___________________________]
+
+Category:
+[ All ▼ ]
+
+--------------------------------------------------
+
+PRODUCT LIST
+
+--------------------------------------------------
+[IMAGE]
+
+ARIEL TECNI DETERDZENT 1,8L ALPINE
+
+Šifra: 12391
+Paket: 4
+
+Selected: [X]
+
+Količina:
+[ 50 ]
+
+--------------------------------------------------
+
+[IMAGE]
+
+ARIEL TECNI DETERDZENT 1,8L MOUNTAIN SPRING
+
+Šifra: 12079
+Paket: 4
+
+Selected: [ ]
+
+Količina:
+[  ]
+
+--------------------------------------------------
+
+
+Na dnu:
+
+Selected products: 12
+
+[ Clear selection ]
+
+[ Export Excel ]
+
+[ Export PDF ]
+
+
+==================================================
+12. PRODUCT CARD
+==================================================
+
+Svaki proizvod treba da bude prikazan kao card.
+
+Card treba da sadrži:
+
+- checkbox
+- sliku
+- naziv
+- šifru
+- paket
+- quantity input
+
+Primer:
+
+┌─────────────────────────────────────┐
+│ [X]                                 │
+│                                     │
+│       PRODUCT IMAGE                 │
+│                                     │
+│ ARIEL TECNI DETERDZENT 1,8L ALPINE │
+│                                     │
+│ Šifra: 12391                        │
+│ Paket: 4                            │
+│                                     │
+│ Količina: [ 50 ]                    │
+└─────────────────────────────────────┘
+
+
+==================================================
+13. SELEKCIJA
+==================================================
+
+Proizvod je uključen u porudžbinu samo ako je selektovan.
+
+Ako nije selektovan:
+- quantity može biti prazan
+- ne sme se pojaviti u exportu.
+
+Ako je selektovan:
+- quantity mora biti validan pozitivan ceo broj.
+
+Nije dozvoljeno:
+
+0
+-5
+abc
+3.5
+
+Dozvoljeno:
+
+1
+5
+10
+50
+100
+
+
+==================================================
+14. PRETRAGA
+==================================================
+
+Dodati search field.
+
+Pretraga treba da radi po:
+
+- nazivu
+- šifri
+- kategoriji
+
+Primer:
+
+Search:
+"ariel"
+
+prikazuje sve Ariel proizvode.
+
+Search:
+"12391"
+
+prikazuje proizvod sa šifrom 12391.
+
+Search:
+"alpine"
+
+prikazuje proizvode koji u nazivu imaju Alpine.
+
+Pretraga treba da bude case-insensitive.
+
+
+==================================================
+15. KATEGORIJE
+==================================================
+
+Ako parser može pouzdano da prepozna kategoriju:
+
+Ariel
+Chicco
+Lenor
+Fairy
+itd.
+
+dodati filter:
+
+All
+Ariel
+Chicco
+Lenor
+Fairy
+
+Ako kategorije nisu pouzdano dostupne iz PDF-a, ova funkcija nije obavezna za MVP.
+
+
+==================================================
+16. SORTIRANJE
+==================================================
+
+Opcionalno dodati:
+
+Sort by:
+- Product name
+- Product code
+- PDF order
+
+Default:
+
+PDF order
+
+jer korisniku može biti prirodnije da vidi katalog istim redosledom kao originalni PDF.
+
+
+==================================================
+17. EXPORT - EXCEL
+==================================================
+
+Excel treba da bude jednostavan.
+
+Primer:
+
+Šifra | Količina
+----------------
+12391 | 50
+12079 | 20
+12208 | 10
+9678  | 15
+
+Ne exportovati:
+- cenu
+- sliku
+- naziv
+- paket
+
+osim ako se naknadno ne odluči drugačije.
+
+Minimalni export:
+
+CODE
+QUANTITY
+
+
+Naziv fajla:
+
+porudzbina_2026-09-13.xlsx
+
+Datum generisati automatski.
+
+
+==================================================
+18. EXPORT - PDF
+==================================================
+
+Napraviti jednostavan PDF.
+
+Naslov:
+
+PORUDŽBINA
+
+Datum:
+
+13.09.2026.
+
+Tabela:
+
+Šifra | Količina
+
+12391 | 50
+12079 | 20
+12208 | 10
+9678  | 15
+
+Ne prikazivati cene.
+
+
+==================================================
+19. VALIDACIJA PRE EXPORTA
+==================================================
+
+Pre exporta proveriti:
+
+- da li postoji makar jedan selektovan proizvod
+- da li svaki selektovani proizvod ima količinu
+- da li je količina pozitivan integer
+
+Ako nije:
+
+Prikazati jasnu poruku.
+
+Primer:
+
+"Proizvod ARIEL TECNI DETERDZENT 1,8L ALPINE nema unetu količinu."
+
+
+Ako nema selektovanih proizvoda:
+
+"Nijedan proizvod nije selektovan."
+
+
+==================================================
+20. DUPLIKATI
+==================================================
+
+Ako parser pronađe isti code više puta:
+
+NE praviti automatski dva različita proizvoda bez provere.
+
+Potrebno je implementirati duplicate detection.
+
+Primer:
+
+12391
+12391
+
+Ako imaju isti naziv:
+- verovatno isti proizvod
+- spojiti
+
+Ako imaju različit naziv:
+- prijaviti warning
+- ne birati proizvoljno
+
+U debug/log outputu prikazati:
+
+WARNING:
+Duplicate product code detected: 12391
+
+
+==================================================
+21. ERROR HANDLING
+==================================================
+
+Aplikacija mora jasno obraditi:
+
+- PDF ne može da se otvori
+- PDF je prazan
+- PDF nema tekst
+- PDF nema prepoznatljive proizvode
+- slike ne mogu da se izvuku
+- export nije moguć
+- korisnik zatvori file picker bez izbora
+
+Ne sme da crashuje zbog jednog lošeg proizvoda.
+
+
+==================================================
+22. PROGRESS BAR
+==================================================
+
+Ako PDF ima mnogo stranica, import može trajati.
+
+Prikazati:
+
+Loading catalog...
+
+Page 1 / 40
+
+Progress bar:
+
+[██████████░░░░░░░░░░]
+
+
+Nakon završetka:
+
+"Loaded 428 products."
+
+
+==================================================
+23. DEBUG MODE
+==================================================
+
+Obavezno napraviti mogućnost debug logovanja.
+
+Primer:
+
+PDF opened:
+catalog.pdf
+
+Pages:
+42
+
+Page 1:
+Found 12 products
+
+Page 2:
+Found 14 products
+
+...
+
+Total:
+428 products
+
+Warnings:
+3 duplicate codes
+2 products without image
+
+
+Ovo je veoma važno tokom razvoja parsera.
+
+
+==================================================
+24. RAW PDF INSPECTION TOOL
+==================================================
+
+Pre finalnog GUI parsera napraviti malu development skriptu:
+
+inspect_pdf.py
+
+Pokretanje:
+
+python inspect_pdf.py katalog.pdf
+
+Treba da ispiše:
+
+Pages: 42
+
+PAGE 1
+-------
+[raw extracted text]
+
+PAGE 2
+-------
+[raw extracted text]
+
+...
+
+Tako developer može da vidi tačno kako PyMuPDF vidi PDF.
+
+Dodatno napraviti opciju:
+
+--page 5
+
+da se analizira samo jedna stranica.
+
+
+==================================================
+25. PRODUCT PARSER TEST
+==================================================
+
+Napraviti test koji na pravom katalogu proverava:
+
+- broj pronađenih proizvoda
+- šifre
+- nazive
+- duplikate
+- proizvode bez slike
+
+Primer:
+
+Expected minimum:
+> 300 products
+
+Ako parser pronađe samo 20:
+TEST FAIL
+
+
+==================================================
+26. PRVI MVP
+==================================================
+
+Prva verzija NE treba da ima:
+
+- login
+- korisničke naloge
+- cloud
+- bazu
+- server
+- online sinhronizaciju
+- mobilnu aplikaciju
+- AI
+- OCR ako nije potreban
+- komplikovane kategorije
+- istoriju porudžbina
+
+MVP treba samo:
+
+1. Open PDF
+2. Parse PDF
+3. Show products
+4. Search
+5. Select
+6. Enter quantity
+7. Export Excel
+8. Export PDF
+
+
+==================================================
+27. USER FLOW
+==================================================
+
+Scenario:
+
+1. Korisnik pokrene aplikaciju.
+
+2. Klikne:
+
+Open PDF
+
+3. Izabere:
+
+katalog.pdf
+
+4. Aplikacija analizira PDF.
+
+5. Prikazuje:
+
+Loaded 428 products.
+
+6. Korisnik ukuca:
+
+Ariel
+
+7. Dobije samo Ariel proizvode.
+
+8. Selektuje:
+
+ARIEL TECNI DETERDZENT 1,8L ALPINE
+
+9. Unese:
+
+50
+
+10. Selektuje još proizvoda.
+
+11. Klikne:
+
+Export
+
+12. Izabere:
+
+Excel
+
+13. Dobije:
+
+porudzbina_2026-09-13.xlsx
+
+Sadržaj:
+
+12391 | 50
+12079 | 20
+12208 | 10
+
+
+==================================================
+28. BITAN ZAHTEV - NE MENJATI PDF
+==================================================
+
+Originalni PDF katalog nikada ne menjati.
+
+Parser samo čita PDF.
+
+Sve generisane slike i podatke čuvati u privremenom folderu/cache-u.
+
+
+==================================================
+29. CACHE
+==================================================
+
+Poželjno je napraviti cache.
+
+Ako korisnik učita isti PDF ponovo:
+
+nemoj ponovo parsirati sve ako nije potrebno.
+
+Može se koristiti hash PDF fajla.
+
+Primer:
+
+SHA256(pdf)
+
+cache/
+
+<hash>/
+
+products.json
+images/
+
+
+Ovo može biti V2 funkcija i nije obavezno za prvi MVP.
+
+
+==================================================
+30. MOBILE VERSION - BUDUĆNOST
+==================================================
+
+Mobilna aplikacija nije deo prvog MVP-a.
+
+Ali arhitekturu parsera napraviti tako da se kasnije može ponovo koristiti.
+
+Moguće buduće opcije:
+
+- Flutter
+- React Native
+- native Android
+- web/PWA
+
+Desktop aplikacija treba prvo da dokaže koncept.
+
+
+==================================================
+31. PYINSTALLER
+==================================================
+
+Kada aplikacija bude gotova napraviti executable.
+
+Na Linuxu:
+
+pyinstaller --onefile --windowed main.py
+
+Poželjno je kasnije napraviti i:
+
+Windows .exe
+
+jer krajnji korisnik možda neće koristiti Linux.
+
+
+==================================================
+32. UI PRINCIPI
+==================================================
+
+Aplikacija treba da bude jednostavna.
+
+Korisnik nije programer.
+
+Glavne akcije moraju biti jasne:
+
+Open PDF
+Search
+Select
+Quantity
+Export
+
+Ne praviti komplikovan settings meni u MVP-u.
+
+
+==================================================
+33. PERFORMANCE
+==================================================
+
+Katalog može imati veliki broj proizvoda.
+
+GUI ne sme da kreira hiljade kompleksnih widgeta odjednom ako to pravi problem.
+
+Ako katalog ima npr. 1000+ proizvoda:
+
+- koristiti lazy loading / pagination ili efikasan QListView/QAbstractListModel
+- ne renderovati sve slike u punoj rezoluciji
+- thumbnail slike skalirati na razumnu veličinu
+
+Originalne slike ne prikazivati u punoj rezoluciji.
+
+
+==================================================
+34. IMAGE THUMBNAILS
+==================================================
+
+Za GUI koristiti thumbnail.
+
+Primer:
+
+original:
+2000x2000
+
+GUI:
+300x300
+
+Ne čuvati ogromne slike u memoriji ako nije potrebno.
+
+
+==================================================
+35. IMPORTANT PARSER PRINCIPLE
+==================================================
+
+NE praviti parser koji je zasnovan samo na jednom screenshotu.
+
+Parser mora prvo da analizira stvarni PDF.
+
+PDF može imati:
+
+- drugačiji broj proizvoda po stranici
+- proizvode različite dužine naziva
+- različito pozicionirane elemente
+- različite slike
+- proizvode bez slike
+- različito napisano pakovanje
+
+Parser treba da bude robustan.
+
+
+==================================================
+36. OCR FALLBACK
+==================================================
+
+Ako PyMuPDF:
+
+page.get_text()
+
+vrati veoma malo ili nimalo teksta:
+
+detektovati da je PDF verovatno image-based.
+
+Tada koristiti OCR fallback.
+
+Moguće tehnologije:
+
+Tesseract OCR
+
+ili drugi lokalni OCR.
+
+Ali OCR koristiti samo ako je potrebno.
+
+
+==================================================
+37. FINALNI PODACI
+==================================================
+
+Bez obzira koliko podataka katalog sadrži, finalna porudžbina treba da bude minimalna.
+
+Primer:
+
+12391 - 50
+12079 - 20
+12208 - 10
+9678 - 15
+
+Ne:
+
+12391 - ARIEL TECNI DETERDZENT - 50 - 980.96 RSD
+
+Samo:
+
+12391 - 50
+
+
+==================================================
+38. ACCEPTANCE CRITERIA
+==================================================
+
+Aplikacija se smatra uspešnom ako:
+
+[ ] Može da učita originalni PDF katalog.
+
+[ ] Može da obradi više stranica.
+
+[ ] Može da pronađe proizvode sa svih stranica.
+
+[ ] Može da pronađe šifru proizvoda.
+
+[ ] Može da ukloni početno slovo iz šifre.
+
+[ ] Može da pronađe naziv proizvoda.
+
+[ ] Može da pronađe paket ako postoji.
+
+[ ] Može da prikaže sliku proizvoda kada je dostupna.
+
+[ ] Može da prikaže proizvod bez slike kada slika nije dostupna.
+
+[ ] Može da pretražuje proizvode.
+
+[ ] Može da selektuje proizvod.
+
+[ ] Može da unese količinu.
+
+[ ] Validira količinu.
+
+[ ] Može da selektuje više proizvoda.
+
+[ ] Može da exportuje Excel.
+
+[ ] Može da exportuje PDF.
+
+[ ] Export sadrži samo šifru i količinu.
+
+[ ] Cene nisu deo finalne porudžbine.
+
+[ ] Aplikacija ne zahteva internet.
+
+[ ] Aplikacija ne menja originalni PDF.
+
+[ ] Aplikacija ne crashuje zbog jednog lošeg proizvoda.
+
+
+==================================================
+39. DEVELOPMENT ORDER
+==================================================
+
+Coding agent treba da radi sledećim redosledom.
+
+PHASE 1
+-------
+Analizirati originalni PDF.
+
+Napraviti:
+
+inspect_pdf.py
+
+Utvrditi strukturu PDF-a.
+
+
+PHASE 2
+-------
+Napraviti Product model.
+
+
+PHASE 3
+-------
+Napraviti parser.
+
+Parser mora da radi bez GUI-ja.
+
+Input:
+PDF
+
+Output:
+List[Product]
+
+
+PHASE 4
+-------
+Napraviti command-line test:
+
+python parse_catalog.py catalog.pdf
+
+Output:
+
+Found 428 products.
+
+12391 | ARIEL TECNI DETERDZENT 1,8L ALPINE
+12079 | ...
+...
+
+
+PHASE 5
+-------
+Napraviti GUI.
+
+Open PDF
+Product list
+Search
+Selection
+Quantity
+
+
+PHASE 6
+-------
+Dodati Excel export.
+
+
+PHASE 7
+-------
+Dodati PDF export.
+
+
+PHASE 8
+-------
+Dodati validation i error handling.
+
+
+PHASE 9
+-------
+Dodati tests.
+
+
+PHASE 10
+--------
+Packaging preko PyInstaller-a.
+
+
+==================================================
+40. VERY IMPORTANT
+==================================================
+
+Nemoj odmah praviti kompletnu aplikaciju bez prethodnog pregleda PDF-a.
+
+Prvi korak je:
+
+ANALYZE THE ACTUAL PDF.
+
+Coding agent treba prvo da:
+1. otvori PDF
+2. proveri broj stranica
+3. izvuče tekst sa nekoliko stranica
+4. analizira strukturu
+5. utvrdi pattern šifre
+6. utvrdi pattern naziva
+7. utvrdi gde se nalaze slike
+8. napravi parser
+9. testira parser na celom PDF-u
+
+Tek kada parser pouzdano radi, praviti GUI.
+
+
+==================================================
+41. EXPECTED FINAL RESULT
+==================================================
+
+Krajnji korisnik treba da može da uradi:
+
+OPEN PDF
+    ↓
+automatsko učitavanje proizvoda
+    ↓
+SEARCH / SCROLL
+    ↓
+SELECT PRODUCTS
+    ↓
+ENTER QUANTITY
+    ↓
+EXPORT
+    ↓
+12391 - 50
+12079 - 20
+12208 - 10
+
+Bez ručnog prepisivanja šifara.
+
+To je osnovna svrha cele aplikacije.
