@@ -23,8 +23,8 @@ class ThumbnailLabel(QLabel):
         super().__init__(parent)
         self._size = size
         self.setFixedWidth(size)
-        self.setMinimumHeight(120)
-        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Ignored)
+        self.setMinimumHeight(size)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
         self.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
         self.set_placeholder()
         self.set_pixmap(pixmap)

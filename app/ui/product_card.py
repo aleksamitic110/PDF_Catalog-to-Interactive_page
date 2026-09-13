@@ -140,8 +140,7 @@ class ProductCard(QFrame):
         self.checkbox.setToolTip("Izaberi proizvod")
         layout.addWidget(self.checkbox, alignment=Qt.AlignRight)
 
-        thumb = ThumbnailLabel(self._pixmap, size=96)
-        thumb.setMinimumHeight(0)
+        thumb = ThumbnailLabel(self._pixmap, size=110)
         layout.addWidget(thumb, alignment=Qt.AlignHCenter)
 
         self.name_label = self._make_name_label(
