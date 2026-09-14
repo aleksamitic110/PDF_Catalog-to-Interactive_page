@@ -46,6 +46,7 @@ class Product:
     page_number: int | None = None
     raw_text: str | None = None
     tiers: list[tuple[str, str]] = field(default_factory=list)
+    akcija: bool = False
 
     def price_for(self, quantity: int) -> float | None:
         """Best matching tier price for a given quantity, else None.

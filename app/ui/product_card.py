@@ -45,6 +45,8 @@ class ProductCard(QFrame):
         self.product = product
         self._pixmap = pixmap
         self._mode = mode
+        self._akcija = bool(getattr(product, "akcija", False))
+        self.akcija_pill = self._akcija_pill()
 
         self.setObjectName("productCard")
         self.setCursor(Qt.PointingHandCursor)
@@ -73,6 +75,8 @@ class ProductCard(QFrame):
     def _apply_style(self) -> None:
         if self.checkbox.isChecked():
             background, border = "#e7f0fb", "2px solid #2f6fd6"
+        elif self._akcija:
+            background, border = "#fff3ce", "1px solid #f2a900"
         else:
             background, border = "#ffffff", "1px solid #d0d0d0"
         self.setStyleSheet(
@@ -88,6 +92,17 @@ class ProductCard(QFrame):
             event.accept()
             return
         super().mousePressEvent(event)
+
+    @staticmethod
+    def _akcija_pill() -> QLabel:
+        pill = QLabel("AKCIJA")
+        pill.setObjectName("akcijaPill")
+        pill.setStyleSheet(
+            "#akcijaPill { background: #f2a900; color: #ffffff;"
+            "border-radius: 3px; padding: 1px 7px; font-size: 11px;"
+            "font-weight: 700; }"
+        )
+        return pill
 
     def _make_name_label(self, text: str, width: int,
                          font_size: int, lines: int) -> QLabel:
@@ -136,9 +151,15 @@ class ProductCard(QFrame):
         layout.setSpacing(4)
         layout.setContentsMargins(9, 7, 9, 7)
 
+        top_row = QHBoxLayout()
+        top_row.setSpacing(6)
+        if self._akcija:
+            top_row.addWidget(self.akcija_pill)
+        top_row.addStretch(1)
         self.checkbox = QCheckBox()
         self.checkbox.setToolTip("Izaberi proizvod")
-        layout.addWidget(self.checkbox, alignment=Qt.AlignRight)
+        top_row.addWidget(self.checkbox)
+        layout.addLayout(top_row)
 
         thumb = ThumbnailLabel(self._pixmap, size=110)
         layout.addWidget(thumb, alignment=Qt.AlignHCenter)
@@ -181,6 +202,8 @@ class ProductCard(QFrame):
         self.checkbox = QCheckBox()
         self.checkbox.setToolTip("Izaberi proizvod")
         top_row.addWidget(self.checkbox, alignment=Qt.AlignTop)
+        if self._akcija:
+            top_row.addWidget(self.akcija_pill, alignment=Qt.AlignTop)
 
         self.name_label = self._make_name_label(
             self.product.name, 820, 16, NAME_LINES

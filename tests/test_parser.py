@@ -37,6 +37,19 @@ def test_parser_finds_expected_number_of_products():
 
 
 @pytest.mark.skipif(_CATALOG is None, reason="sample catalog PDF not present")
+def test_parser_flags_akcija_products():
+    result = parse_catalog(_CATALOG)
+    by_code = {p.code: p for p in result.products}
+    flagged = [p for p in result.products if p.akcija]
+    assert 20 <= len(flagged) <= 40
+    # canonical promotions present in the sample catalog
+    for code in ("10036", "11401", "10351"):
+        assert by_code[code].akcija, code
+    # random non-promotion product must NOT be flagged
+    assert not by_code["11951"].akcija
+
+
+@pytest.mark.skipif(_CATALOG is None, reason="sample catalog PDF not present")
 def test_parser_finds_no_duplicate_codes():
     result = parse_catalog(_CATALOG)
     assert result.duplicate_codes == []

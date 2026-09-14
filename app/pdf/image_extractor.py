@@ -18,6 +18,7 @@ from app.utils.image_utils import make_thumbnail
 DECORATIVE_XREFS = {188}
 HEADER_STRIP_SIZE = (555, 83)
 THUMB_SUFFIX = "_thumb.jpg"
+BADGE_SIZE = HEADER_STRIP_SIZE  # the orange "AKCIJA" stamp on promoted products
 
 
 def _product_images(page) -> list[dict]:
@@ -27,6 +28,35 @@ def _product_images(page) -> list[dict]:
         if info["xref"] not in DECORATIVE_XREFS
         and (info["width"], info["height"]) != HEADER_STRIP_SIZE
     ]
+
+
+def link_badges_to_codes(
+    page, code_positions: dict[str, tuple[float, float]]
+) -> set[str]:
+    """Map every "AKCIJA" badge stamp on the page to a product code.
+
+    The stamp (a wide orange banner drawn over the product photo) is embedded
+    as a small reused image. A product cell is laid out code-above-image, so
+    the badge belongs to the nearest product code sitting ABOVE the badge in
+    the same column.
+    """
+    infos = [
+        info
+        for info in page.get_image_info(xrefs=True)
+        if (info["width"], info["height"]) == BADGE_SIZE
+    ]
+    linked: set[str] = set()
+    for info in infos:
+        x0, y0 = info["bbox"][0], info["bbox"][1]
+        center_x = (info["bbox"][0] + info["bbox"][2]) / 2
+        above = [
+            (code, x, y)
+            for code, (x, y) in code_positions.items()
+            if y <= y0 and abs(x - center_x) < 400
+        ]
+        if above:
+            linked.add(max(above, key=lambda item: item[2])[0])
+    return linked
 
 
 def link_images_to_codes(

@@ -139,6 +139,7 @@ def parse_catalog(
             text_data = page.get_text("dict")
             positions = extract_code_positions(page, text_data=text_data)
             banners = _collect_banners(text_data)
+            akcija_codes = image_extractor.link_badges_to_codes(page, positions)
             linked = (
                 image_extractor.link_images_to_codes(page, positions)
                 if images_dir_path
@@ -179,6 +180,7 @@ def parse_catalog(
                             page_number=page_index + 1,
                             raw_text=page_text,
                             tiers=list(tiers),
+                            akcija=current_code in akcija_codes,
                         )
                         result.products.append(product)
                         code_to_xref.setdefault(current_code, linked.get(current_code))
